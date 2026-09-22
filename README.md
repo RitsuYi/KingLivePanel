@@ -1,6 +1,6 @@
-# 王者直播信息屏 · King Live Panel
+# KingLivePanel · 王者直播信息屏
 
-为《王者荣耀》直播设计的 Windows 桌面信息条，使用 Electron、React 和 TypeScript 开发。默认画布为 **1920 × 62**：左侧显示心率网页，中间预留歌词区域，右侧显示五个分路的席位状态。
+**KingLivePanel** 是为《王者荣耀》直播设计的 Windows 桌面信息条，使用 Electron、React 和 TypeScript 开发。默认画布为 **1920 × 62**：左侧显示心率网页，中间预留歌词区域，右侧显示五个分路的席位状态。
 
 展示窗口和控制台独立。展示窗口透明、无边框、鼠标穿透；控制台负责切换状态、编辑布局和管理窗口。
 
@@ -14,6 +14,14 @@
 - 配置与网页数据保存在程序旁的 `data/`，支持随整个文件夹迁移。
 
 本程序不检测游戏对局，不自动换局，不抓取歌词，不生成或记录心率历史。
+
+### 车队状态界面
+
+上方预览展示心率、歌词预留区和五分路的位置；下方卡片用于切换席位状态，底部按钮管理直播展示窗口。
+
+![KingLivePanel 车队状态：直播预览、五分路席位和展示窗口控制](docs/images/team-status.png)
+
+本文截图来自实际桌面程序，使用独立临时配置。图中的绿色、黄色、红色席位用于演示三种状态；首次启动仍全部为空位。心率尚未连接，没有模拟真实测量数值。
 
 ## 运行便携版
 
@@ -49,6 +57,10 @@ Windows 显示缩放可能带来 1 像素取整差异，最终捕获尺寸以直
 
 预览中的文字、辅助线、选框和操作按钮不会进入直播输出。
 
+![KingLivePanel 布局编辑：布局草稿、画布设置和控件位置属性](docs/images/layout-editor.png)
+
+图中已在草稿中调整对抗路的 X 位置，“应用到直播”按钮可用。只有应用后，修改才会同步到直播展示窗口。
+
 ## 心率连接
 
 在控制台的“心率连接”中粘贴 HypeRate 的完整 HTTPS 展示网址，点击“保存并加载”。程序支持以下域名，并保留网址查询参数：
@@ -59,6 +71,10 @@ Windows 显示缩放可能带来 1 像素取整差异，最终捕获尺寸以直
 请使用展示地址；设计器编辑页不适合作为心率画面。可通过控制台打开 HypeRate 官网或设计器获取组件，再按需要调整网页缩放和心率区域尺寸。
 
 网页在独立沙箱中运行，没有 Node.js 或本地文件访问权限。“网页已载入”只代表加载成功，真实测量、更新频率和停止测量后的显示由 HypeRate 组件决定。端到端测试使用本地模拟网页，不代表已经完成 Apple Watch 实机验证。
+
+![KingLivePanel 心率连接：HypeRate 展示网址、网页缩放和连接指引](docs/images/heart-connection.png)
+
+在左侧填写展示网址并设置缩放，点击“保存并加载”；右侧提供首次连接步骤和官方网站入口。截图保留未配置状态。
 
 ## 数据与备份
 
@@ -82,9 +98,10 @@ Windows 显示缩放可能带来 1 像素取整差异，最终捕获尺寸以直
 
 使用 Windows x64 和 Node.js 24.12 或以上版本；依赖版本由 `package-lock.json` 锁定。
 
-首次安装：
+项目文件夹名称为 `KingLivePanel`。从项目父目录进入文件夹后安装依赖：
 
 ```powershell
+cd KingLivePanel
 npm ci
 ```
 
@@ -135,16 +152,21 @@ release/build-时间戳/
 ## 目录结构
 
 ```text
-electron/             主进程、窗口、IPC、便携存储与 preload
-src/                  展示窗口、控制台、布局编辑器及样式
-shared/model.ts       数据模型、默认值、迁移与校验
-public/               SVG 源图标及生成的 PNG / ICO
-scripts/              开发、构建、打包和集成验证脚本
-tests/                单元测试
-portable-readme.txt    随发布包提供的简要说明
-package-lock.json     依赖锁定文件
+KingLivePanel/
+├── docs/images/          README 使用的实际界面截图
+├── electron/             主进程、窗口、IPC、便携存储与 preload
+├── src/                  展示窗口、控制台、布局编辑器及样式
+├── shared/model.ts       数据模型、默认值、迁移与校验
+├── public/               SVG 源图标及生成的 PNG / ICO
+├── scripts/              开发、构建、打包和集成验证脚本
+├── tests/                单元测试
+├── portable-readme.txt   随发布包提供的简要说明
+├── package-lock.json     依赖锁定文件
+└── README.md             项目使用与开发说明
 ```
 
 `.gitignore` 排除依赖、下载缓存、`dist/`、`dist-electron/`、`release/`、`artifacts/`、`.test-data/`、`data/` 以及日志和诊断文件。Git 只保存源码、必要资源、配置、测试及说明文档。
+
+`docs/images/` 中的说明截图随文档提交，不进入桌面程序的发布包。项目目录名为 `KingLivePanel`，当前 Windows 可执行文件名仍为 `King Live Panel.exe`。
 
 测试使用独立的 `.test-data/`；端到端测试的截图和结果写入 `artifacts/`。这些生成目录不属于源代码，也不进入发布包。不要把用户配置或旧发布包提交到仓库。
