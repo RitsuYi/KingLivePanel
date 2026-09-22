@@ -1,0 +1,32 @@
+# Dependencies and download caches
+node_modules/
+.npm-cache/
+.electron-cache/
+.builder-cache/
+# Build and release output
+dist/
+dist-electron/
+release/
+
+# Test output and local application data
+.test-data/
+artifacts/
+coverage/
+playwright-report/
+test-results/
+data/
+
+# Diagnostic records and editor/OS temporary files
+*.log
+*.log.*
+*.dmp
+*.heapsnapshot
+*.cpuprofile
+*.tsbuildinfo
+*.tmp
+*.bak
+builder-debug.yml
+builder-effective-config.yaml
+.DS_Store
+Thumbs.db
+desktop.ini
