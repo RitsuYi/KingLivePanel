@@ -2,12 +2,12 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { defaultLayout, layoutErrors, layoutWarnings, ROLE_IDS, widgetName, widgets, type AppState, type Box, type HeartStatus, type Layout, type RoleId, type WidgetId } from '../shared/model';
 import { position, Strip } from './Strip';
 
-export function Numeric({ label, value, onChange, min = 0, max = 8192, step = 1 }: { label: string; value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number }) {
-  return <label className="field numeric"><span>{label}</span><input aria-label={label} type="number" value={value} min={min} max={max} step={step} onChange={e => { if (e.target.value !== '' && Number.isFinite(e.target.valueAsNumber)) onChange(e.target.valueAsNumber); }}/></label>;
+export function Numeric({ label, value, onChange, min = 0, max = 8192, step = 1, disabled = false }: { label: string; value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean }) {
+  return <label className="field numeric"><span>{label}</span><input aria-label={label} type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={e => { if (e.target.value !== '' && Number.isFinite(e.target.valueAsNumber)) onChange(e.target.valueAsNumber); }}/></label>;
 }
 
-export function Preview({ state, layout, status, editing = false, selected, onSelect, onBoxChange }: {
-  state: AppState; layout: Layout; status: HeartStatus; editing?: boolean; selected?: WidgetId;
+export function Preview({ state, layout, status, heartRate = null, editing = false, selected, onSelect, onBoxChange }: {
+  state: AppState; layout: Layout; status: HeartStatus; heartRate?: number | null; editing?: boolean; selected?: WidgetId;
   onSelect?: (id: WidgetId) => void; onBoxChange?: (id: WidgetId, box: Partial<Box>) => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -39,7 +39,7 @@ export function Preview({ state, layout, status, editing = false, selected, onSe
     <div className="preview-viewport" ref={container}>
       <div className="preview-scroll"><div className="preview-frame" style={{ width: layout.width * scale, height: layout.height * scale }}>
         <div className="preview-canvas" style={{ width: layout.width, height: layout.height, transform: `scale(${scale})` }}>
-          <Strip state={state} layout={layout} status={status} preview sampleLyrics/>
+          <Strip state={state} layout={layout} status={status} heartRate={heartRate} preview sampleLyrics/>
           {editing && <>
             <div className="center-guide" style={{ left: layout.width / 2 }}/>
             {widgets(layout).map(([id, b]) => <button key={id} type="button" aria-label={`编辑${widgetName(id)}`} data-testid={`editor-${id}`} className={`edit-box ${selected === id ? 'selected' : ''} ${!b.visible ? 'hidden-widget' : ''}`} style={position(b)}
@@ -57,7 +57,7 @@ export function Preview({ state, layout, status, editing = false, selected, onSe
   </section>;
 }
 
-export function Editor({ state, status, draft, setDraft, run }: { state: AppState; status: HeartStatus; draft: Layout; setDraft: (layout: Layout | null) => void; run: (op: Promise<{ ok: boolean; error?: string }>, message?: string) => Promise<boolean> }) {
+export function Editor({ state, status, heartRate = null, draft, setDraft, run }: { state: AppState; status: HeartStatus; heartRate?: number | null; draft: Layout; setDraft: (layout: Layout | null) => void; run: (op: Promise<{ ok: boolean; error?: string }>, message?: string) => Promise<boolean> }) {
   const [selected, setSelected] = useState<WidgetId>('clash');
   const box = selected === 'heart' ? draft.heart : selected === 'lyrics' ? draft.lyrics : draft.roles[selected];
   const errors = layoutErrors(draft);
@@ -68,7 +68,7 @@ export function Editor({ state, status, draft, setDraft, run }: { state: AppStat
     else setDraft({ ...draft, roles: { ...draft.roles, [id]: { ...draft.roles[id], ...patch } } });
   };
   return <>
-    <Preview state={state} layout={draft} status={status} editing selected={selected} onSelect={setSelected} onBoxChange={changeBox}/>
+    <Preview state={state} layout={draft} status={status} heartRate={heartRate} editing selected={selected} onSelect={setSelected} onBoxChange={changeBox}/>
     <div className="editor-grid">
       <section className="panel"><div className="section-heading"><h2>画布设置</h2><span className={`tiny-tag ${changed ? 'amber' : ''}`}>{changed ? '有未应用的修改' : '与直播一致'}</span></div>
         <div className="field-row"><Numeric label="画布宽度" value={draft.width} min={320} onChange={width => setDraft({ ...draft, width })}/><Numeric label="画布高度" value={draft.height} min={32} max={2160} onChange={height => setDraft({ ...draft, height })}/></div>

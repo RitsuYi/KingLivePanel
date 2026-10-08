@@ -16,7 +16,7 @@ let offline = false;
 const fixture = http.createServer((req, res) => {
   if (offline) { req.socket.destroy(); return; }
   res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' });
-  res.end('<!doctype html><html><body style="color:white;background:transparent;font:24px sans-serif;margin:0">TEST 72<script>window.setInterval(()=>{},1000)</script></body></html>');
+  res.end('<!doctype html><html><body style="color:white;background:transparent;font:24px sans-serif;margin:0"><span style="color:#ed174d">♥</span> <span class="tabular-nums">77</span><script>window.setInterval(()=>{},1000)</script></body></html>');
 });
 async function waitFor(fn, label) {
   const until = Date.now() + 12000;
@@ -24,6 +24,16 @@ async function waitFor(fn, label) {
   throw Error('Timed out: ' + label);
 }
 const snap = () => control.evaluate(() => window.panel.snapshot());
+const heartViewVisible = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('#overlay')).contentView.children[0].getVisible());
+const replaceHeartMarkup = markup => app.evaluate(async ({ BrowserWindow }, html) => {
+  const view = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('#overlay')).contentView.children[0];
+  await view.webContents.executeJavaScript(`document.body.innerHTML = ${JSON.stringify(html)}`);
+}, markup);
+const expectHeartRate = async value => {
+  await waitFor(async () => (await snap()).runtime.heartRate === value, `current heart rate ${value}`);
+  await waitFor(async () => (await overlay.locator('.heart-placeholder strong').textContent()) === String(value ?? '--'), 'native number rendered');
+  await waitFor(async () => (await control.locator('.heart-placeholder strong').textContent()) === String(value ?? '--'), 'preview number rendered');
+};
 async function launch(extra = []) {
   const env = { ...process.env, KINGLIVE_E2E: '1', KINGLIVE_TEST_DATA: dataDir };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -145,14 +155,78 @@ async function assertOutputBackground(background) {
     assert.equal(child.prefs.nodeIntegration, false);
     assert.equal(child.prefs.contextIsolation, true);
     assert.equal(child.prefs.sandbox, true);
+    assert.equal(await heartViewVisible(), true);
+    assert.equal((await snap()).runtime.heartRate, null);
+    const mode = control.getByRole('switch', { name: '仅读取网页数字', exact: true });
+    await mode.check();
+    assert.equal(await control.getByLabel('网页缩放倍数', { exact: true }).isDisabled(), true);
+    assert.equal((await snap()).state.heart.numbersOnly, false, 'mode is a draft until saved');
+    await control.getByRole('button', { name: '保存并加载', exact: true }).click();
+    await expectHeartRate(77);
+    assert.equal(await heartViewVisible(), false, 'remote icon is hidden');
+    assert.equal(await overlay.locator('.heart-placeholder > svg').count(), 1);
+    await overlay.screenshot({ path: path.join(artifacts, 'heart-numbers-only.png'), omitBackground: true, clip: { x: 0, y: 0, width: 210, height: 62 } });
+    await replaceHeartMarkup('<span class="tabular-nums">96</span>');
+    await expectHeartRate(96);
+    await control.getByRole('button', { name: '布局编辑', exact: true }).click();
+    await expectHeartRate(96);
+    await control.getByRole('button', { name: '心率连接', exact: true }).click();
+    // Known outputs take priority over IDs, graph labels and hidden elements.
+    for (const [markup, expectedRate] of [
+      ['<span>123</span><strong id="heartrate">81 BPM</strong>', 81],
+      ['<span>123</span><strong id="heartrate">--</strong>', null],
+      ['<span style="display:none">99</span><div><span>85</span></div><canvas></canvas><svg><text>120</text></svg>', 85],
+      ['<div><span style="display:none">99</span></div><div style="opacity:0"><span>95</span></div>', null],
+      ['<div>84 <span>BPM</span><span hidden>125</span></div>', 84],
+      ['<span>70</span><span>90</span>', null],
+      ['<span class="tabular-nums">88</span><span style="display:none" class="tabular-nums">125</span>', 88],
+      ['<strong id="heartrate">0</strong>', null],
+      ['<strong id="heartrate">300</strong>', 300],
+      ['<strong id="heartrate">301</strong>', null],
+      ['<strong id="heartrate">79</strong>', 79],
+      ['<strong id="heartrate">72.5</strong>', null],
+      ['<strong id="heartrate">77</strong>', 77],
+      ['<p>Device ID: 123</p><p>Connection error 72</p>', null],
+    ]) { await replaceHeartMarkup(markup); await expectHeartRate(expectedRate); }
+    await replaceHeartMarkup('<span class="tabular-nums">77</span>');
+    await expectHeartRate(77);
+    const beforeInvalidHeart = (await snap()).state.heart;
+    assert.equal((await control.evaluate(() => window.panel.setHeart({ url: '', zoom: 1, numbersOnly: 'true' }))).ok, false);
+    assert.deepEqual((await snap()).state.heart, beforeInvalidHeart);
+    await mode.uncheck();
+    await control.getByRole('button', { name: '保存并加载', exact: true }).click();
+    await waitFor(async () => (await snap()).state.heart.numbersOnly === false, 'restore webpage mode');
+    assert.equal(await heartViewVisible(), true);
+    assert.equal((await snap()).runtime.heartRate, null);
+    await waitFor(async () => await overlay.locator('.heart-placeholder').count() === 0, 'webpage replaces native heart');
+    await mode.check();
+    await control.getByRole('button', { name: '保存并加载', exact: true }).click();
+    await expectHeartRate(77);
+    console.log('PASS: numbers-only switch, original white heart, live preview/output updates, extraction boundaries and original webpage mode.');
     offline = true;
     await control.getByRole('button', { name: '刷新网页', exact: true }).click();
     await waitFor(async () => (await snap()).runtime.heartStatus === 'error', 'failed load');
+    await expectHeartRate(null);
     offline = false;
     await control.getByRole('button', { name: '刷新网页', exact: true }).click();
     await waitFor(async () => (await snap()).runtime.heartStatus === 'loaded', 'network recovery');
+    await expectHeartRate(77);
+    // Hiding/removing/changing the source must not retain the old reading.
+    await control.evaluate(async () => {
+      const { state } = await window.panel.snapshot();
+      await window.panel.applyLayout({ ...state.layout, heart: { ...state.layout.heart, visible: false } });
+    });
+    assert.equal((await snap()).runtime.heartRate, null);
+    await control.evaluate(async () => {
+      const { state } = await window.panel.snapshot();
+      await window.panel.applyLayout({ ...state.layout, heart: { ...state.layout.heart, visible: true } });
+    });
+    await expectHeartRate(77);
+    await control.evaluate(() => window.panel.setHeart({ url: '', zoom: 1, numbersOnly: true }));
+    await expectHeartRate(null);
+    await control.evaluate(url => window.panel.setHeart({ url, zoom: 1, numbersOnly: true }), testURL + '?changed');
+    await expectHeartRate(77);
     await control.screenshot({ path: path.join(artifacts, 'heart-settings.png'), fullPage: true });
-    await control.evaluate(() => window.panel.setHeart({ url: '', zoom: 1 }));
     console.log('PASS: restricted URL, isolated native heart view, failed load and recovery.');
 
     // Leave an illustrative status combination only in the isolated test profile.
@@ -169,6 +243,8 @@ async function assertOutputBackground(background) {
     await closeApp();
     await launch();
     assert.deepEqual((await snap()).state, expected);
+    await expectHeartRate(77);
+    assert.equal(await heartViewVisible(), false, 'saved numbers-only mode restored');
     await assertOutputBackground('transparent');
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'panel-config.json'), 'utf8')), expected);
     await closeApp();

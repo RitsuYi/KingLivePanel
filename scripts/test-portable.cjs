@@ -69,6 +69,7 @@ async function launch() {
     heartStorage: session.fromPartition('persist:hyperate-widget').storagePath,
   }));
   assert.equal(actual.packaged, true);
+  assert.equal(actual.version, JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version);
   const data = path.join(folder, 'data');
   const insideData = value => {
     assert.equal(typeof value, 'string');
@@ -101,6 +102,8 @@ async function close() {
     let control = await launch();
     const result = await control.evaluate(async () => {
       localStorage.setItem('portable-storage-check', 'retained');
+      const heart = await window.panel.setHeart({ url: '', zoom: 1, numbersOnly: true });
+      if (!heart.ok) return heart;
       return window.panel.setSlot('clash', 'current');
     });
     assert.equal(result.ok, true);
@@ -115,6 +118,7 @@ async function close() {
     console.log('PASS: packaged EXE paths, Node temp, both browser sessions and configuration stay beside the EXE.');
     control = await launch();
     assert.equal((await control.evaluate(() => window.panel.snapshot())).state.slots.clash, 'current');
+    assert.equal((await control.evaluate(() => window.panel.snapshot())).state.heart.numbersOnly, true);
     await close();
 
     const relocated = path.join(runDir, '搬迁后的便携版 portable');
@@ -127,6 +131,7 @@ async function close() {
     folder = relocated;
     control = await launch();
     assert.equal((await control.evaluate(() => window.panel.snapshot())).state.slots.clash, 'current');
+    assert.equal((await control.evaluate(() => window.panel.snapshot())).state.heart.numbersOnly, true);
     assert.equal(await control.evaluate(() => localStorage.getItem('portable-storage-check')), 'retained');
     const cookies = await app.evaluate(async ({ session }) => session.fromPartition('persist:hyperate-widget').cookies.get({ name: 'portable-storage-check' }));
     assert.equal(cookies[0]?.value, 'retained');

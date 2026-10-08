@@ -28,7 +28,7 @@ function App() {
   if (page === 'guide') return <Guide/>;
   if (error) return <p role="alert">{error}</p>;
   if (!snapshot) return null;
-  return page === 'overlay' ? <Strip state={snapshot.state} status={snapshot.runtime.heartStatus}/> : <Control snapshot={snapshot}/>;
+  return page === 'overlay' ? <Strip state={snapshot.state} status={snapshot.runtime.heartStatus} heartRate={snapshot.runtime.heartRate}/> : <Control snapshot={snapshot}/>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode>
   {page === 'overlay' ? <App/> : <div className="desktop-shell">

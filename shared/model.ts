@@ -27,12 +27,12 @@ export interface Layout {
   roles: Record<RoleId, RoleBox>; heart: Box; lyrics: Box;
 }
 export interface AppState {
-  version: 2; layout: Layout; slots: Record<RoleId, SlotStatus>; heart: { url: string; zoom: number };
+  version: 2; layout: Layout; slots: Record<RoleId, SlotStatus>; heart: { url: string; zoom: number; numbersOnly: boolean };
 }
 export type WidgetId = RoleId | 'heart' | 'lyrics';
 export type HeartStatus = 'unconfigured' | 'loading' | 'loaded' | 'error';
 export interface RuntimeState {
-  heartStatus: HeartStatus; displayVisible: boolean; alwaysOnTop: boolean; storageWarning: string;
+  heartStatus: HeartStatus; heartRate: number | null; displayVisible: boolean; alwaysOnTop: boolean; storageWarning: string;
 }
 export interface Snapshot { state: AppState; runtime: RuntimeState }
 export interface Result { ok: boolean; error?: string }
@@ -58,7 +58,7 @@ export function defaultLayout(): Layout {
   };
 }
 export function defaultState(): AppState {
-  return { version: 2, layout: defaultLayout(), slots: Object.fromEntries(ROLE_IDS.map(id => [id, 'empty'])) as AppState['slots'], heart: { url: '', zoom: 1 } };
+  return { version: 2, layout: defaultLayout(), slots: Object.fromEntries(ROLE_IDS.map(id => [id, 'empty'])) as AppState['slots'], heart: { url: '', zoom: 1, numbersOnly: false } };
 }
 export function widgets(layout: Layout): [WidgetId, Box][] {
   return [['heart', layout.heart], ['lyrics', layout.lyrics], ...ROLE_IDS.map(id => [id, layout.roles[id]] as [RoleId, RoleBox])];
@@ -94,7 +94,7 @@ export function isAllowedHeartURL(value: string, allowLocalTest = false): boolea
 }
 const slotSchema = z.enum(SLOT_STATUSES);
 const slotsSchema = z.object({ clash: slotSchema, jungle: slotSchema, mid: slotSchema, farm: slotSchema, roam: slotSchema }).strict();
-const heartSchema = z.object({ url: z.string().max(32000), zoom: z.number().min(0.1).max(5) }).strict();
+const heartSchema = z.object({ url: z.string().max(32000), zoom: z.number().min(0.1).max(5), numbersOnly: z.boolean().default(false) }).strict();
 const stateSchema = z.object({ version: z.literal(2), layout: layoutSchema, slots: slotsSchema, heart: heartSchema }).strict();
 const legacyRoleBoxSchema = boxSchema.extend({ iconSize: z.number().min(8).max(36), arcWidth: z.number().min(1).max(4) });
 const legacySlotSchema = z.object({ current: z.boolean(), next: z.boolean() }).strict();

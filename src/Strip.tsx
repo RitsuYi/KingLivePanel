@@ -21,14 +21,14 @@ export function RoleIndicator({ id, value, box, animations }: { id: RoleId; valu
   </div>;
 }
 
-export function HeartPlaceholder({ status, preview }: { status: HeartStatus; preview: boolean }) {
-  const text = status === 'error' ? '连接失败' : status === 'loading' ? '连接中' : status === 'loaded' && preview ? '网页已载入' : '--';
+export function HeartPlaceholder({ status, preview, numbersOnly = false, heartRate = null }: { status: HeartStatus; preview: boolean; numbersOnly?: boolean; heartRate?: number | null }) {
+  const text = numbersOnly ? (status === 'loaded' ? heartRate ?? '--' : '--') : status === 'error' ? '连接失败' : status === 'loading' ? '连接中' : status === 'loaded' && preview ? '网页已载入' : '--';
   return <div className="heart-placeholder"><HeartGlyph/><div><span className="heart-caption">心率</span><strong>{text}</strong></div></div>;
 }
-export function Strip({ state, layout = state.layout, status, preview = false, sampleLyrics = false }: { state: AppState; layout?: Layout; status: HeartStatus; preview?: boolean; sampleLyrics?: boolean }) {
+export function Strip({ state, layout = state.layout, status, heartRate = null, preview = false, sampleLyrics = false }: { state: AppState; layout?: Layout; status: HeartStatus; heartRate?: number | null; preview?: boolean; sampleLyrics?: boolean }) {
   const { heart, lyrics } = layout;
   return <div className={`strip ${layout.background}`} data-testid="strip" style={{ width: layout.width, height: layout.height }}>
-    {heart.visible && (preview || status !== 'loaded') && <div className="strip-widget" style={position(heart)}><HeartPlaceholder status={status} preview={preview}/></div>}
+    {heart.visible && (state.heart.numbersOnly || preview || status !== 'loaded') && <div className="strip-widget" style={position(heart)}><HeartPlaceholder status={status} preview={preview} numbersOnly={state.heart.numbersOnly} heartRate={heartRate}/></div>}
     {preview && sampleLyrics && lyrics.visible && <div className="sample-lyrics" style={position(lyrics)}>歌词由直播伴侣显示</div>}
     {ROLE_IDS.map(id => {
       const b = layout.roles[id];

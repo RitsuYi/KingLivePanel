@@ -2,6 +2,7 @@ import { app, BrowserWindow, WebContentsView, ipcMain, screen, shell, session, M
 import fs from 'node:fs';
 import path from 'node:path';
 import { configurePortableStorage } from './portable-storage';
+import { HEART_READER_SCRIPT } from './heart-reader';
 import { defaultState, isAllowedHeartURL, layoutErrors, parseState, ROLE_IDS, SLOT_STATUSES, type AppState, type HeartStatus, type Layout, type Result, type RuntimeState } from '../shared/model';
 
 const testing = !app.isPackaged && process.env.KINGLIVE_E2E === '1';
@@ -18,7 +19,10 @@ let outputScale = 1;
 let loadedURL = '';
 let retry: ReturnType<typeof setTimeout> | null = null;
 let retryCount = 0;
-const runtime: RuntimeState = { heartStatus: 'unconfigured', displayVisible: false, alwaysOnTop: false, storageWarning: '' };
+let heartReadTimer: ReturnType<typeof setTimeout> | null = null;
+let heartReaderView: WebContentsView | null = null;
+let heartReadGeneration = 0;
+const runtime: RuntimeState = { heartStatus: 'unconfigured', heartRate: null, displayVisible: false, alwaysOnTop: false, storageWarning: '' };
 
 function configPath() { return path.join(app.getPath('userData'), 'panel-config.json'); }
 function loadState() {
@@ -46,7 +50,39 @@ function snapshot() { return { state, runtime }; }
 function broadcast() {
   for (const win of [control, display]) if (win && !win.isDestroyed()) win.webContents.send('panel:changed', snapshot());
 }
-function status(value: HeartStatus) { runtime.heartStatus = value; broadcast(); }
+function status(value: HeartStatus) {
+  if (value !== 'loaded') stopHeartReader();
+  runtime.heartStatus = value; broadcast();
+}
+function stopHeartReader() {
+  heartReadGeneration++;
+  if (heartReadTimer) clearTimeout(heartReadTimer);
+  heartReadTimer = null;
+  heartReaderView = null;
+  runtime.heartRate = null;
+}
+function syncHeartReader() {
+  const view = heartView;
+  if (!view || !state.heart.numbersOnly || runtime.heartStatus !== 'loaded') {
+    stopHeartReader(); return;
+  }
+  if (heartReaderView === view) return;
+  stopHeartReader();
+  heartReaderView = view;
+  const generation = heartReadGeneration;
+  const isCurrent = () => generation === heartReadGeneration && heartView === view && !view.webContents.isDestroyed();
+  const read = async () => {
+    if (!isCurrent()) return;
+    let value: unknown = null;
+    try { value = await view.webContents.executeJavaScriptInIsolatedWorld(999, [{ code: HEART_READER_SCRIPT }]); }
+    catch { /* A replaced/unavailable document must clear the last number. */ }
+    if (!isCurrent()) return;
+    const rate = typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 300 ? value : null;
+    if (runtime.heartRate !== rate) { runtime.heartRate = rate; broadcast(); }
+    heartReadTimer = setTimeout(() => { void read(); }, 500);
+  };
+  void read();
+}
 function loadPage(win: BrowserWindow, page: string) {
   if (devURL) return win.loadURL(`${devURL}/#${page}`);
   return win.loadFile(path.join(__dirname, '../dist/index.html'), { hash: page });
@@ -56,6 +92,7 @@ function protectedWindow(win: BrowserWindow) {
   win.webContents.on('will-navigate', (event) => event.preventDefault());
 }
 function destroyHeart() {
+  stopHeartReader();
   if (retry) { clearTimeout(retry); retry = null; }
   if (heartView) {
     if (display && !display.isDestroyed()) display.contentView.removeChildView(heartView);
@@ -69,14 +106,14 @@ function placeHeart() {
   const b = state.layout.heart;
   heartView.setBounds({ x: Math.round(b.x * outputScale), y: Math.round(b.y * outputScale), width: Math.max(1, Math.round(b.width * outputScale)), height: Math.max(1, Math.round(b.height * outputScale)) });
   heartView.webContents.setZoomFactor(state.heart.zoom * outputScale);
-  heartView.setVisible(b.visible && runtime.heartStatus !== 'error');
+  heartView.setVisible(b.visible && !state.heart.numbersOnly && runtime.heartStatus !== 'error');
 }
 function syncHeart(force = false) {
   if (!display || display.isDestroyed()) return;
   if (!state.heart.url || !state.layout.heart.visible) {
     destroyHeart(); status('unconfigured'); return;
   }
-  if (heartView && loadedURL === state.heart.url && !force) { placeHeart(); return; }
+  if (heartView && loadedURL === state.heart.url && !force) { placeHeart(); syncHeartReader(); return; }
   destroyHeart();
   status('loading');
   const view = new WebContentsView({ webPreferences: {
@@ -96,6 +133,12 @@ function syncHeart(force = false) {
   };
   view.webContents.on('will-navigate', preventUntrustedNavigation);
   view.webContents.on('will-redirect', preventUntrustedNavigation);
+  view.webContents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
+    if (!isCurrent() || !mainFrame || inPlace) return;
+    navigationFailed = false;
+    if (retry) { clearTimeout(retry); retry = null; }
+    status('loading');
+  });
   const fail = () => {
     if (!isCurrent()) return;
     navigationFailed = true;
@@ -111,7 +154,7 @@ function syncHeart(force = false) {
     await view.webContents.insertCSS('html, body { background: transparent !important; margin: 0 !important; overflow: hidden !important; }').catch(() => {});
     if (!isCurrent() || navigationFailed) return;
     if (retry) { clearTimeout(retry); retry = null; }
-    retryCount = 0; status('loaded'); placeHeart();
+    retryCount = 0; status('loaded'); placeHeart(); syncHeartReader();
   });
   void view.webContents.loadURL(state.heart.url).catch(fail);
 }
@@ -175,7 +218,7 @@ function handlers() {
   });
   action('panel:heart', (settings: AppState['heart']) => {
     if (!settings || typeof settings.url !== 'string' || !isAllowedHeartURL(settings.url.trim(), testing)) throw new Error('请填写 app.hyperate.io 或 designer.hyperate.io 的 HTTPS 展示网址。');
-    const next = parseState({ ...state, heart: { url: settings.url.trim(), zoom: settings.zoom } });
+    const next = parseState({ ...state, heart: { url: settings.url.trim(), zoom: settings.zoom, numbersOnly: settings.numbersOnly } });
     persist(next); syncHeart();
   });
   action('panel:heart-refresh', () => { retryCount = 0; syncHeart(true); });

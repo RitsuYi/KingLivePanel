@@ -61,12 +61,20 @@ describe('layout and saved configuration boundaries', () => {
     const result = parseState(legacy);
     expect(result.version).toBe(2);
     expect(result.slots).toEqual({ clash: 'empty', jungle: 'current', mid: 'next', farm: 'current', roam: 'empty' });
-    expect(result.heart).toEqual(legacy.heart);
+    expect(result.heart).toEqual({ ...legacy.heart, numbersOnly: false });
     expect(result.layout.heart).toEqual(base.layout.heart);
     expect(result.layout.roles.jungle).toEqual({ ...base.layout.roles.jungle, x: base.layout.roles.jungle.x + 1, iconSize: 22 });
     expect(result.layout.roles.clash.iconSize).toBe(36);
     expect(parseState(JSON.parse(JSON.stringify(result)))).toEqual(result);
     expect(() => parseState({ ...legacy, slots: { ...legacy.slots, clash: { current: 'true', next: false } } })).toThrow();
+  });
+  it('preserves the original display for old settings and persists the numbers-only switch', () => {
+    const state = defaultState();
+    expect(parseState({ ...state, heart: { url: 'https://app.hyperate.io/saved-id', zoom: 1.5 } }).heart)
+      .toEqual({ url: 'https://app.hyperate.io/saved-id', zoom: 1.5, numbersOnly: false });
+    state.heart.numbersOnly = true;
+    expect(parseState(JSON.parse(JSON.stringify(state))).heart.numbersOnly).toBe(true);
+    expect(() => parseState({ ...state, heart: { ...state.heart, numbersOnly: 'true' } })).toThrow();
   });
 });
 describe('remote heart page boundary', () => {
